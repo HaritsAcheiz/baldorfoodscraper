@@ -1,0 +1,5 @@
+httpx
+selenium
+selectolax
+pandas
+python-dotenv
