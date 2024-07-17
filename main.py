@@ -23,11 +23,22 @@ class BFScraper:
     base_url: str = 'https://www.baldorfood.com/'
     user_agent: str = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 
+
     def extract_price(self, input_string):
         pattern = r'\$\d+\.\d{2}'
         match = re.search(pattern, input_string)
         if match:
             return match.group(0)  # Return the matched string
+
+        return None
+
+
+    def extract_cat_id(self, input_string):
+        pattern = r'#tab-(\d+)'
+        match = re.search(pattern, input_string)
+        if match:
+            return match.group(1)
+
         return None
 
 
@@ -79,6 +90,26 @@ class BFScraper:
             category_urls.append(urljoin(self.base_url, category.attributes.get('href', '')))
 
         return category_urls
+
+
+    def get_category_ids(self):
+        headers = {
+            'user-agent': self.user_agent
+        }
+
+        with Client(headers=headers) as client:
+            response = client.get(self.base_url)
+        if response.status_code != 200:
+            response.raise_for_status()
+
+        tree = HTMLParser(response.text)
+        category_element = tree.css_first('ul.catalog-categories.foods-menu')
+        categories = category_element.css('a.menu-fi-item')
+        category_ids = list()
+        for category in categories:
+            category_ids.append(category.attributes.get('data-href', ''))
+
+        return category_ids
 
 
     async def fetch(self, aclient, url, proxy, limit):
@@ -144,6 +175,8 @@ class BFScraper:
 
 
     def insert_to_db(self, htmls):
+        if os.path.exists('baldorfood.db'):
+            os.remove('baldorfood.db')
         conn = sqlite3.connect("baldorfood.db")
         curr = conn.cursor()
         curr.execute(
@@ -164,9 +197,10 @@ class BFScraper:
     def get_subcategory_url(self, htmls):
         subcategory_urls = list()
         for html in htmls:
+            print(html[1])
             tree = HTMLParser(html[1])
-            subcategory_element = tree.css_first('div.subcats-list-mode')
-            subcategories = subcategory_element.css('a.subcat-l-photo')
+            # subcategory_element = tree.css_first('div.subcats-list-mode')
+            # subcategories = subcategory_element.css('a.subcat-l-photo')
             for subcategory in subcategories:
                 subcategory_urls.append(urljoin(self.base_url, subcategory.attributes.get('href', '')) + '?viewall=1')
 
@@ -218,25 +252,28 @@ class BFScraper:
         image_df = pd.DataFrame.from_records(product_datas)
         if not os.path.exists('./result'):
             os.mkdir('./result')
-        image_df.to_csv('result/products_01.csv', index=False)
+        image_df.to_csv('result/products.csv', index=False)
 
 
 
 if __name__ == '__main__':
     scraper = BFScraper()
     scraper.get_cookies()
-    categories = scraper.get_category_url()
+    # categories = scraper.get_category_url()
+    category_ids = scraper.get_category_ids()
+    for cat_id in category_ids:
+        print(cat_id)
 
     # categories_htmls = scraper.sync_fetch_all(categories[0:1])
-    categories_htmls = asyncio.run(scraper.fetch_all(categories[0:1]))
-    subcategories = scraper.get_subcategory_url(categories_htmls)
+    # categories_htmls = asyncio.run(scraper.fetch_all(categories))
+    # subcategories = scraper.get_subcategory_url(categories_htmls)
 
     # subcategories_htmls = scraper.sync_fetch_all(subcategories)
-    subcategories_htmls = asyncio.run(scraper.fetch_all(subcategories))
-    products = scraper.get_product_url(subcategories_htmls)
+    # subcategories_htmls = asyncio.run(scraper.fetch_all(subcategories))
+    # products = scraper.get_product_url(subcategories_htmls)
 
     # products_htmls = scraper.sync_fetch_all(products)
-    products_htmls = asyncio.run(scraper.fetch_all(products))
-    scraper.insert_to_db(products_htmls)
+    # products_htmls = asyncio.run(scraper.fetch_all(products))
+    # scraper.insert_to_db(products_htmls)
 
-    scraper.get_data()
+    # scraper.get_data()
